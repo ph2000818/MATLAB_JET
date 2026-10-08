@@ -141,19 +141,104 @@ fprintf('%8s| %9.2f %9.2f  [kJ/kg/K]\n','Total S',S1/kJ,S2/kJ);
 fprintf('----------------------------------------------\n%8s| %9.4f %9.4f  [K]\n----------------------------------------------\n','T2-int vs T2-bis',T2int,T2bis);
 %% Here starts your part (compressor,combustor,turbine and nozzle). ...
 
+%bisection [2-3] compressor, isentropic :
+cMethod = 'Bisection Method';
+sPart = 'Compressor';
+
+P3 = P2*P3overP2;
+
+s3thermal = s2thermal + Rg*log(P3/P2);          %isentropic compression (no change in entropy)
+
+% Bisection to determine T3
+TL = T2;
+TH = 1000;
+iter = 0;
+
+while abs(TH-TL) > 0.01
+    iter = iter+1;
+    Ti = (TL+TH)/2;
+
+    for i=1:NSp
+        si3(i) = SNasa(Ti,SpS(i));
+    end
+
+    s3i = Yair*si3';
+
+    if s3i > s3thermal
+        TH = Ti;
+    else
+        TL = Ti;
+    end
+end
+
+T3 = (TH+TL)/2;
+
+for i=1:NSp
+    hi3(i) = HNasa(T3,SpS(i));
+    si3(i) = SNasa(T3,SpS(i));
+end
+
+h3 = Yair*hi3';
+s3thermal = Yair*si3';
+
+S3 = s3thermal - Rg*log(P3/Pref);
+
+v3 = v2;
+
+
+wc = h3-h2;                 %compressor work
+
+%% Print to screen
+fprintf('\n%14s\n',cMethod);
+fprintf('Stage  ||%14s        [unit]\n      NR|%9i %9i\n',sPart,2,3);
+fprintf('-------------------------------------\n');
+fprintf('%8s| %9.2f %9.2f  [K]\n','Temp',T2,T3);
+fprintf('%8s| %9.2f %9.2f  [kPa]\n','Press',P2/kPa,P3/kPa);
+fprintf('%8s| %9.2f %9.2f  [m/s]\n','v',v2,v3);
+fprintf('---  H/S    -------------------------\n');
+fprintf('%8s| %9.2f %9.2f  [kJ/kg]\n','h',h2/kJ,h3/kJ);
+fprintf('%8s| %9.2f %9.2f  [kJ/kg/K]\n','Total S',S2/kJ,S3/kJ);
+fprintf('-------------------------------------\n');
+fprintf('Compressor work: %9.2f [kJ/kg]\n',wc/kJ);
 
 
 
+%interpolation [2-3] compressor, isentropic :
+cMethod = 'Interpolation Method';
+sPart = 'Compressor';
+
+P3 = P2*P3overP2;           %pressure at exit of compressor
+
+s3thermal = s2thermal + Rg*log(P3/P2);
+
+T3 = interp1(sair_a,TR,s3thermal);
+
+for i=1:NSp
+    hi3(i) = HNasa(T3,SpS(i));
+    si3(i) = SNasa(T3,SpS(i));
+end
+
+h3 = Yair*hi3';
+s3thermal = Yair*si3';
+
+S3 = s3thermal - Rg*log(P3/Pref);
+
+v3=v2;
+
+wc = h3-h2;         %compressor work input
 
 
-
-
-
-
-
-
-
-
+fprintf('\n%14s\n',cMethod);
+fprintf('Stage  ||%14s        [unit]\n      NR|%9i %9i\n',sPart,2,3);
+fprintf('-------------------------------------\n');
+fprintf('%8s| %9.2f %9.2f  [K]\n','Temp',T2,T3);
+fprintf('%8s| %9.2f %9.2f  [kPa]\n','Press',P2/kPa,P3/kPa);
+fprintf('%8s| %9.2f %9.2f  [m/s]\n','v',v2,v3);
+fprintf('---  H/S    -------------------------\n');
+fprintf('%8s| %9.2f %9.2f  [kJ/kg]\n','h',h2/kJ,h3/kJ);
+fprintf('%8s| %9.2f %9.2f  [kJ/kg/K]\n','Total S',S2/kJ,S3/kJ);
+fprintf('-------------------------------------\n');
+fprintf('Compressor work: %9.2f [kJ/kg]\n',wc/kJ);
 
 
 
