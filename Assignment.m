@@ -243,6 +243,8 @@ fprintf('Compressor work: %9.2f [kJ/kg]\n',wc/kJ);
 
 
 %Combustion--------------------------------------------------------------------
+cProcess = 'Combustion';
+P4 = P3;
 
 MO2 = Mi(2);
 MN2 = Mi(5);
@@ -310,6 +312,27 @@ end
 intT = [T3, Tmax];                      
 T4 = fzero(fcth,intT);
 
+fprintf('\n%14s\n',cProcess);
+fprintf('Stage  ||%14s        [unit]\n      NR|%9i %9i\n','Combustor',3,4);
+fprintf('-------------------------------------\n');
+fprintf('%8s| %9.2f %9.2f  [K]\n','Temp',T3,T4);
+fprintf('%8s| %9.2f %9.2f  [kPa]\n','Press',P3/kPa,P4/kPa);
+fprintf('%8s| %9.2f %9.2f  [J/kg/K]\n','Rg',Rg3,Rg4);
+fprintf('---  H/S    -------------------------\n');
+fprintf('%8s| %9.2f %9.2f  [kJ/kg]\n','h',h3/kJ,h4/kJ);
+fprintf('-------------------------------------\n');
+fprintf('%-22s %9.2f  [K]\n','Temperature rise:',T4-T3);
+fprintf('%-22s %9.2f  [-]\n','Air/fuel ratio:',AF);
+fprintf('%-22s %9.2f  [-]\n','Stoich. A/F ratio:',AFstoec);
+fprintf('%-22s %9.2f  [-]\n','Equivalence ratio:',Equivalence_ratio);
+fprintf('%-22s %9.2f  [kJ/kg]\n','Fuel enthalpy:',Hfuel/kJ);
+fprintf('-------------------------------------\n');
+fprintf('%8s| %9s %9s\n','Species','reactant','product');
+fprintf('%8s| %9.4f %9.4f  [-]\n','H2',A,0);
+fprintf('%8s| %9.4f %9.4f  [-]\n','O2',B,E);
+fprintf('%8s| %9.4f %9.4f  [-]\n','N2',C,F);
+fprintf('%8s| %9.4f %9.4f  [-]\n','H2O',0,D);
+fprintf('-------------------------------------\n');
 
 
 
@@ -320,8 +343,6 @@ T4 = fzero(fcth,intT);
 Yprod = [0 E 0 D F];
 Rgprod = Runiv * sum(Yprod ./ Mi);
 
-% Constant-pressure combustor
-P4 = P3;
 
 % Turbine power equals compressor power
 mgasrate = mairrate + mfurate;
@@ -373,3 +394,35 @@ fprintf('Turbine power:  %.2f kW\n', turbinePower/kJ);
 fprintf('S4:             %.6f kJ/kg/K\n', S4/kJ);
 fprintf('S5:             %.6f kJ/kg/K\n', S5/kJ);
 fprintf('Power residual: %.6f W\n', powerError);
+
+
+
+%% Nozzle 5-6 (adiabatic and isentropic)
+
+% Exit pressure
+P6 = Pamb;
+
+% Calculation thermal entropy at 6 
+s6thermal = s5thermal + Rgprod * log(P6/P5);    % Isentropic expansion: S6 = S5
+
+% Find temperature T6 using interpolation
+sprod = Yprod * sia';
+T6 = interp1(sprod, TR, s6thermal);
+
+% Calculate enthalpy at 6
+for i = 1:NSp
+    hi6(i) = HNasa(T6, SpS(i));
+end
+
+h6 = Yprod * hi6';
+
+% Calculate exhaust velocity
+v6 = sqrt(2*(h5-h6));       % The turbine assumes v5 = 0
+
+% Calculate total specific entropy at 6
+S6 = s6thermal - Rgprod * log(P6/Pref) + smix;
+
+% Print results
+disp(v6)
+disp(P6)
+disp(T6)
