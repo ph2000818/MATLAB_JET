@@ -242,7 +242,134 @@ fprintf('Compressor work: %9.2f [kJ/kg]\n',wc/kJ);
 
 
 
+%Combustion--------------------------------------------------------------------
+
+MO2 = Mi(2);
+MN2 = Mi(5);
+MH2 = Mi(1); 
+MH2O = Mi(4);              %Molar masses of air components
+N2overO2 = 0.79/0.21;                    %Proportion of N2 to O2 in the air
+nAF = AF/((MO2*0.21 + MN2*0.79)/MH2); %Molar AF ratio
+
+%Mixture Compositions:
+%a*H2 + b*O2 + c*N2 --> d*H2O + e*O2 + f*N2
+%Only H2 disappears and is converted to H2O, taking 1/2 of one O2 molecule,
+%N2 stays untouched
+
+a = 1;
+b = 0.21*nAF;
+c = 0.79*nAF;
+d = 1;
+e = b - 1/2;
+f = c;
+
+%Mass fractions (A,B,C,D,E,F):
+
+mtot1 = a*MH2 + b*MO2 + c*MN2;       %Total mass of reactants
+A = a*MH2/mtot1;
+B = b*MO2/mtot1;
+C = c*MN2/mtot1;
+Reactants_fractions = [A;B;C;0];
+
+mtot2 = d*MH2O + e*MO2 + f*MN2;    %Total mass of products
+D = d*MH2O/mtot2;
+E = e*MO2/mtot2;
+F = f*MN2/mtot2;
+
+Products_fractions = [0;E;F;D];
+
+%Composition table
+
+Components = ["H2";"O2";"N2";"H2O"];
+Mixture_compositions = table(Components,Reactants_fractions,Products_fractions);
+
+%Equivalence ratio:
+
+nAFstoec = 0.5/0.21;              %Stoechiometric molar Air/fuel ratio
+AFstoec = nAFstoec*((0.21*MO2+0.79*MN2)/MH2); %Stoechiometric Air/Fuel ratio (mass)
+Equivalence_ratio = AFstoec/AF;
+
+%Specific gas constant:
+Yprod = [0, E, 0, D, F];
+Yair = [0 0.21 0 0 0.79];
+
+Rg3 = Runiv*sum(Yair./Mi);
+Rg4 = Runiv*sum(Yprod./Mi);
+%Thermodynamics part :
+
+mairrate = AF*mfurate;
+Hfuel = HNasa(Tamb,SpS(1)); %[J/kg]
+
+h4 = (mairrate.*h3 + mfurate.*Hfuel)/(mairrate + mfurate); %Enthalpy as a function of mass flux and initial enthalpies 
+fcth = @(T) D*HNasa(T,SpS(4)) + E*HNasa(T,SpS(2)) + F*HNasa(T,SpS(5)) - h4;
+if T3 < 1000    %Making sure Tmax never exceeds the Nasa polynomials range
+    Tmax = T3 + 2000;
+else
+    Tmax = 3000;
+end
+intT = [T3, Tmax];                      
+T4 = fzero(fcth,intT);
 
 
 
-% Make a choice for which type of solution method you want to use.
+
+%----------------------------------------------------------------------------------------
+%% Turbine [4-5]: adiabatic and isentropic
+
+% Product mass fractions, matching the order in SpS
+Yprod = [0 E 0 D F];
+Rgprod = Runiv * sum(Yprod ./ Mi);
+
+% Constant-pressure combustor
+P4 = P3;
+
+% Turbine power equals compressor power
+mgasrate = mairrate + mfurate;
+turbinePower = mairrate * wc;             % [W]
+h5 = h4 - turbinePower / mgasrate;        % [J/kg gas]
+
+% Find T5 using the combustor's existing enthalpy function
+% fcth(T) = product enthalpy at T minus h4
+fcth5 = @(T) fcth(T) + h4 - h5;
+T5 = fzero(fcth5, [TR(1), T4]);
+
+% Temperature-dependent entropy at states 4 and 5
+for i = 1:NSp
+    si4(i) = SNasa(T4, SpS(i));
+    si5(i) = SNasa(T5, SpS(i));
+    hi5(i) = HNasa(T5, SpS(i));
+end
+
+s4thermal = Yprod * si4';
+s5thermal = Yprod * si5';
+
+% Isentropic expansion: S5 = S4
+P5 = P4 * exp((s5thermal - s4thermal) / Rgprod);
+
+% Mole fractions to Mass fractions Entropy of mixing; 
+Xprod = (Yprod ./ Mi) / sum(Yprod ./ Mi);
+present = Yprod > 0;
+smix = -Runiv * sum((Yprod(present) ./ Mi(present)) ...
+    .* log(Xprod(present)));
+
+% Total specific entropy [J/kg/K]
+S4 = s4thermal - Rgprod * log(P4/Pref) + smix;
+S5 = s5thermal - Rgprod * log(P5/Pref) + smix;
+
+% Negligible velocity at turbine outlet
+v5 = 0;
+
+% Check the enthalpy obtained from the calculated temperature
+h5check = Yprod * hi5';
+powerError = mgasrate * (h4 - h5check) - turbinePower;
+
+% Results
+fprintf('\nTurbine [4-5]\n');
+fprintf('T5:             %.2f K\n', T5);
+fprintf('P5:             %.2f kPa\n', P5/kPa);
+fprintf('v5:             %.2f m/s\n', v5);
+fprintf('h5:             %.2f kJ/kg\n', h5/kJ);
+fprintf('Turbine power:  %.2f kW\n', turbinePower/kJ);
+fprintf('S4:             %.6f kJ/kg/K\n', S4/kJ);
+fprintf('S5:             %.6f kJ/kg/K\n', S5/kJ);
+fprintf('Power residual: %.6f W\n', powerError);
